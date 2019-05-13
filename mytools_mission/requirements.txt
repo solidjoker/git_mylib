@@ -1,0 +1,3 @@
+pandas==0.24.1
+SendMail==2.0
+python_dateutil==2.8.0
