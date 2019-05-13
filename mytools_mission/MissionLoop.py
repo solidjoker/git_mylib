@@ -3,7 +3,7 @@
 
 # # MissionLoop
 
-# In[1]:
+# In[3]:
 
 
 """
@@ -101,8 +101,6 @@ class MissionLoop():
                 set _send_mail function: send_mail(subject=subject,content=content,attachments=attachments)
                 return: None
                 
-            
-
     """
     
     def __init__(self,exception_warning=None):
@@ -114,7 +112,7 @@ class MissionLoop():
         self.MR = MissionRecord.MissionRecord(exception_warning=exception_warning)
         self.set_loop()
         self.init_mail()
-        self.msg_fmt = self.init_msg_fmt() 
+        self.loop_dict = self.get_loop_dict() 
         self.msg_flag = True
         self.min_time_sleep = 5
         self.period_dict = {'m':relativedelta(months=1),
@@ -138,7 +136,7 @@ class MissionLoop():
                 mission_name = func.__name__
             # if daily_check and True
             if self.daily_check and self.MR.check_mission_success(mission_name=mission_name) > 0:
-                self.send_loop_mail(msg_fmt='already',mission_name=mission_name)
+                self.send_loop_mail(loop_dict='already',mission_name=mission_name)
                 @wraps(func)
                 def wrapper(*args, **kwargs):
                     return None # not execute and return None
@@ -155,18 +153,18 @@ class MissionLoop():
                             result = func(*args, **kwargs)
                             # run success
                             if result == self.result_check:
-                                self.send_loop_mail(msg_fmt='success',mission_name=mission_name)
+                                self.send_loop_mail(loop_dict='success',mission_name=mission_name)
                                 return True
                             # run failure
                             else:
                                 next_time = self.update_next_time(next_time) # Get next iteration time
                                 if self.msg_flag: # only send fail email one time
-                                    self.send_loop_mail(msg_fmt='fail',mission_name=mission_name,next_time=next_time)
+                                    self.send_loop_mail(loop_dict='fail',mission_name=mission_name,next_time=next_time)
                                     self.msg_flag = False
                             self.max_tries -= 1    
                             # return False beyond max_tries
                             if self.max_tries <= 0:
-                                self.send_loop_mail(msg_fmt='max_tries',mission_name=mission_name)
+                                self.send_loop_mail(loop_dict='max_tries',mission_name=mission_name)
                                 return False
                             # time_sleep
                             self.time_sleep(next_time=next_time)
@@ -193,7 +191,7 @@ class MissionLoop():
         self.daily_check = daily_check
         self.result_check = result_check
         
-    def init_msg_fmt(self):
+    def get_loop_dict(self):
         """
         set message format
         """
@@ -201,7 +199,7 @@ class MissionLoop():
         content = 'Content: Mission {mission_name} {content}'
         content_next = 'Content: Mission {mission_name} {content} at {next_time}'
         reason = 'Reason: {reason}'
-        msg_fmt = {
+        loop_dict = {
             'already': {
                 'subject': subject.format(subject='Already Run!',mission_name='{mission_name}',now='{now}'),
                 'content': content.format(content='will not run',mission_name='{mission_name}'),
@@ -224,9 +222,9 @@ class MissionLoop():
                 'reason': reason.format(reason='tries exhausted, terminated!'),
             },
         }
-        return msg_fmt
+        return loop_dict
     
-    def send_loop_mail(self,msg_fmt=None,mission_name=None,now=None,next_time=None):
+    def send_loop_mail(self,loop_dict=None,mission_name=None,now=None,next_time=None):
         """
         self.msg_partial 
         """
@@ -236,20 +234,20 @@ class MissionLoop():
         try:
             if not self._send_mail:
                 raise AssertionError
-            subject = self.msg_fmt[msg_fmt]['subject'].format(mission_name=mission_name,now=now)
-            if not msg_fmt == 'fail':
-                content = self.msg_fmt[msg_fmt]['content'].format(mission_name=mission_name)
+            subject = self.loop_dict[loop_dict]['subject'].format(mission_name=mission_name,now=now)
+            if not loop_dict == 'fail':
+                content = self.loop_dict[loop_dict]['content'].format(mission_name=mission_name)
             else:
-                content = self.msg_fmt[msg_fmt]['content'].format(mission_name=mission_name,next_time=next_time)
-            reason = self.msg_fmt[msg_fmt]['reason']
+                content = self.loop_dict[loop_dict]['content'].format(mission_name=mission_name,next_time=next_time)
+            reason = self.loop_dict[loop_dict]['reason']
             self._send_mail(subject=subject,content=content+'\n'+reason)
         except AssertionError: # for test
-            subject = self.msg_fmt[msg_fmt]['subject'].format(mission_name=mission_name,now=now)
-            if not msg_fmt == 'fail':
-                content = self.msg_fmt[msg_fmt]['content'].format(mission_name=mission_name)
+            subject = self.loop_dict[loop_dict]['subject'].format(mission_name=mission_name,now=now)
+            if not loop_dict == 'fail':
+                content = self.loop_dict[loop_dict]['content'].format(mission_name=mission_name)
             else:
-                content = self.msg_fmt[msg_fmt]['content'].format(mission_name=mission_name,next_time=next_time)
-            reason = self.msg_fmt[msg_fmt]['reason']
+                content = self.loop_dict[loop_dict]['content'].format(mission_name=mission_name,next_time=next_time)
+            reason = self.loop_dict[loop_dict]['reason']
             print(f'{subject}\n{content}\n{reason}')
             pass # for test
         except Exception as e:
