@@ -3,7 +3,7 @@
 
 # # MissionLoop
 
-# In[3]:
+# In[12]:
 
 
 """
@@ -15,6 +15,7 @@ the decorator for mission record, see the docs in the Class MissionLoop for deta
     - two decorator for function:
         - 1. decorator_loop(self,mission_name=None)
         - 2. decorator_p_loop(self,p_mission_name=None)
+        
 """
 
 import datetime
@@ -29,7 +30,7 @@ from mytools_sendmail import SendMail
 from mytools_sendmail import SendMail_config
 
 
-# In[4]:
+# In[13]:
 
 
 class MissionLoop():
@@ -139,7 +140,7 @@ class MissionLoop():
                 self.send_loop_mail(loop_dict='already',mission_name=mission_name)
                 @wraps(func)
                 def wrapper(*args, **kwargs):
-                    return None # not execute and return None
+                    return True # not execute and return True
             else:
                 @self.MR.decorator_mission_record(mission_name=mission_name) # if return then record
                 @wraps(func)
@@ -171,8 +172,7 @@ class MissionLoop():
             return wrapper            
         return decorator_func
     
-    def set_loop(self,days=0,hours=0,minutes=0,seconds=0,
-                 max_tries=0,daily_check=True,result_check=True):
+    def set_loop(self,days=0,hours=0,minutes=0,seconds=0,max_tries=0,daily_check=True,result_check=True):
         """
         set loop
         :param days: days
@@ -439,7 +439,7 @@ class MissionLoop():
     
 
 
-# In[5]:
+# In[14]:
 
 
 if __name__ == '__main__':
@@ -475,7 +475,6 @@ if __name__ == '__main__':
         else:
             return False
     test_func_random('hello',world='world')
-
     
 # if __name__ == '__main__':   
 #     清除记录

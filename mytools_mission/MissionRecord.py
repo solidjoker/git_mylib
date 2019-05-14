@@ -3,7 +3,7 @@
 
 # # MissionRecord
 
-# In[1]:
+# In[2]:
 
 
 """
@@ -17,11 +17,12 @@ the decorator for mission record, see the docs in the Class MissionRecord for de
 import datetime
 from functools import wraps
 from collections import namedtuple
+import os
 
 from mytools_database import sqlite3_tools
 
 
-# In[2]:
+# In[3]:
 
 
 class MissionRecord:
@@ -84,10 +85,16 @@ class MissionRecord:
         self._status = 'STATUS'
         self._period_dict = {'y':4, 'm':7, 'd':10, 'hh':13,'mm':16,'ss':19} # for statistics
         self.exception_warning = exception_warning
-        self.db = 'MISSION_RECORD.db'
+        try:
+            basedir = os.path.dirname(os.path.abspath(__file__)) # abspath
+        except:
+            basedir = './'
+        self.db = os.path.join(basedir,'MISSION_RECORD.db')
+#         print(os.path.abspath(self.db))
+#         print('db path:',os.path.abspath(self.db))
         self.table = 'MISSION_RECORD'
         self.init_db_table()
-
+        
     def decorator_mission_record(self,mission_name=None):
         """
         decorator for mission record
@@ -205,7 +212,7 @@ class MissionRecord:
             return False
 
 
-# In[3]:
+# In[4]:
 
 
 if __name__ == '__main__':

@@ -2,6 +2,6 @@
 
 host = 'localhost'
 port = 3306
-user = ''
-password = ''
+user = 'root'
+password = 'Aaa11111'
 use_unicode = True
