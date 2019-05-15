@@ -41,56 +41,59 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             - 2. delegate_sql_config
         - example:
         --------------------------------------------------------------------
-        class ToutiaoIndexFetchStore(AiohttpFrame_FetchStore):
-        
-        def delegate_prepare_data(self,response):
-            try:
-                data = json.loads(response)
-                start = data['trends_range']['start']
-                end = data['trends_range']['end']
-                dateindex = pd.date_range(start=start,end=end,freq='D')
-                keyword = list(data['trends'].keys())[0]
-                datas = data['trends'][keyword]
-                df = pd.DataFrame({'keyword':keyword,'date':dateindex,'data':datas})
-                return df
-            except Exception as e:
-                print(e)
-                return None
+        class Spider_TouTiao_Index(AiohttpFrame_FetchStore):
 
-        def delegate_sql_config(self):
-            host = 'localhost'
-            port = 3306
-            user = 'root'
-            password = ''
-            db = 'toutiaoindex'
-            use_unicode = True
-            sql_template = 'REPLACE %s (%s) VALUES ("%s");'
-            table = 'data_toutiaoindex'
-            variables = ['KEYWORDS','DATE','TOUTIAO_INDEX']
-            return host,port,user,password,db,use_unicode,sql_template,table,variables
-        
-        def get_date_list(self,sd_date,ed_date,period=15,timefmt=None):
-            # 得到日期的list[{sd_str,ed_str}]
-            date_list = []
-            count = (ed_date - sd_date).days // period + 1
-            for i in range(1,count+1):
-                date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
-                                  'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
-            date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
-            return date_list
-    
-        def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
-            urlformat = 'https://index.toutiao.com/api/keyword/trends?' \
-            'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
-            timefmt = '%Y-%m-%d'      
-            sd_date = datetime.datetime.strptime(start,timefmt)
-            ed_date = datetime.datetime.strptime(end,timefmt)
-            date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
-            urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
-                                     start=d['sd_str'].replace('-',''),
-                                     end=d['ed_str'].replace('-',''),
-                                     keyword=keyword) for d in date_list for keyword in keywords]
-            return urls
+            def delegate_prepare_data(self,response):
+                try:
+                    data = json.loads(response)
+                    start = data['trends_range']['start']
+                    end = data['trends_range']['end']
+                    dates = pd.date_range(start=start,end=end,freq='D')
+                    keywords = list(data['trends'].keys())[0]
+                    data_indexes = data['trends'][keywords]
+                    df = pd.DataFrame({'keywords':keywords,
+                                       'market':'全国',
+                                       'date':dates,
+                                       'data_index':data_indexes})
+                    return df
+                except Exception as e:
+                    print(e)
+                    return None
+
+            def delegate_sql_config(self):
+                user = pymysql_config.user
+                password = pymysql_config.password
+                host = pymysql_config.host
+                port = pymysql_config.port
+                db = 'toutiao'
+                use_unicode = pymysql_config.use_unicode
+                sql_template = 'REPLACE %s (%s) VALUES ("%s");'
+                table = 'data_index'
+                variables = ['KEYWORDS','MARKET','DATE','DATA_INDEX']
+                return host,port,user,password,db,use_unicode,sql_template,table,variables
+
+            def get_date_list(self,sd_date,ed_date,period=30,timefmt=None):
+                # 得到日期的list[{sd_str,ed_str}]
+                date_list = []
+                count = (ed_date - sd_date).days // period + 1
+                for i in range(1,count+1):
+                    date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
+                                      'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
+                date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
+                return date_list
+
+            def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
+                urlformat = 'https://index.toutiao.com/api/keyword/trends?' \
+                'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
+                timefmt = '%Y-%m-%d'      
+                sd_date = datetime.datetime.strptime(start,timefmt)
+                ed_date = datetime.datetime.strptime(end,timefmt)
+                date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
+                urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
+                                         start=d['sd_str'].replace('-',''),
+                                         end=d['ed_str'].replace('-',''),
+                                         keyword=keyword) for d in date_list for keyword in keywords]
+                return urls
         
         def main():
             import pprint
@@ -99,7 +102,7 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
 
             region = '0' # 全国
             category = '0'
-            keywords =  ['今日头条']# 可变 
+            keywords =  ['逍客']# 可变 
             start = '2019-04-20'#  可变 >8天不能跑出数据
             end = '2019-05-10'# 可变
             is_hourly = '0' 
@@ -149,12 +152,12 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         loop_tasks = []
         for task_id in self.tasks_status:
             if not self.tasks_status[task_id]['status']:
-                if astime > 0:
-                    await asyncio.sleep(astime)
+                if self.astime > 0:
+                    await asyncio.sleep(self.astime)
                 task = asyncio.ensure_future(self.run_task(task_id=task_id,
                                                            url=self.tasks_status[task_id]['url'],
                                                            data=self.tasks_status[task_id]['data']))
-                if astime > 0:
+                if self.astime > 0:
                     await task
                 loop_tasks.append(task)
         result = await asyncio.wait(loop_tasks)
@@ -337,7 +340,7 @@ if __name__ == '__main__':
             host = 'localhost'
             port = 3306
             user = 'root'
-            password = ''
+            password = 'Aaa11111'
             db = 'toutiaoindex'
             use_unicode = True
             sql_template = 'REPLACE %s (%s) VALUES ("%s");'
@@ -374,7 +377,7 @@ if __name__ == '__main__':
         
         region = '0' # 全国
         category = '0'
-        keywords =  ['今日头条']# 可变 
+        keywords =  ['逍客']# 可变 
         start = '2019-04-20'#  可变 >8天不能跑出数据
         end = '2019-05-10'# 可变
         is_hourly = '0' 
