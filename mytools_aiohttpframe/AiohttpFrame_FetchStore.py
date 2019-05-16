@@ -4,7 +4,7 @@
 # # AiohttpFrame_FetchStore
 # - [aiohttp使用参考](https://www.jianshu.com/p/3de5c3626012)
 
-# In[2]:
+# In[1]:
 
 
 """
@@ -26,7 +26,7 @@ import traceback
 from mytools_aiohttpframe.AiohttpFrame_Login import AiohttpFrame_Login
 
 
-# In[40]:
+# In[2]:
 
 
 class AiohttpFrame_FetchStore(AiohttpFrame_Login):
@@ -41,88 +41,97 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             - 2. delegate_sql_config
         - example:
         --------------------------------------------------------------------
-        class Spider_TouTiao_Index(AiohttpFrame_FetchStore):
-
-            def delegate_prepare_data(self,response):
-                try:
-                    data = json.loads(response)
-                    start = data['trends_range']['start']
-                    end = data['trends_range']['end']
-                    dates = pd.date_range(start=start,end=end,freq='D')
-                    keywords = list(data['trends'].keys())[0]
-                    data_indexes = data['trends'][keywords]
-                    df = pd.DataFrame({'keywords':keywords,
-                                       'market':'全国',
-                                       'date':dates,
-                                       'data_index':data_indexes})
-                    return df
-                except Exception as e:
-                    print(e)
-                    return None
-
-            def delegate_sql_config(self):
-                user = pymysql_config.user
-                password = pymysql_config.password
-                host = pymysql_config.host
-                port = pymysql_config.port
-                db = 'toutiao'
-                use_unicode = pymysql_config.use_unicode
-                sql_template = 'REPLACE %s (%s) VALUES ("%s");'
-                table = 'data_index'
-                variables = ['KEYWORDS','MARKET','DATE','DATA_INDEX']
-                return host,port,user,password,db,use_unicode,sql_template,table,variables
-
-            def get_date_list(self,sd_date,ed_date,period=30,timefmt=None):
-                # 得到日期的list[{sd_str,ed_str}]
-                date_list = []
-                count = (ed_date - sd_date).days // period + 1
-                for i in range(1,count+1):
-                    date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
-                                      'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
-                date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
-                return date_list
-
-            def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
-                urlformat = 'https://index.toutiao.com/api/keyword/trends?' \
-                'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
-                timefmt = '%Y-%m-%d'      
-                sd_date = datetime.datetime.strptime(start,timefmt)
-                ed_date = datetime.datetime.strptime(end,timefmt)
-                date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
-                urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
-                                         start=d['sd_str'].replace('-',''),
-                                         end=d['ed_str'].replace('-',''),
-                                         keyword=keyword) for d in date_list for keyword in keywords]
-                return urls
         
-        def main():
-            import pprint
-            astime = 0
-            TIFS = ToutiaoIndexFetchStore(astime=astime)
+    class ToutiaoIndexFetchStore(AiohttpFrame_FetchStore):
+        
+        def delegate_prepare_data(self,response):
+            try:
+                data = json.loads(response)
+                start = data['trends_range']['start']
+                end = data['trends_range']['end']
+                dates = pd.date_range(start=start,end=end,freq='D')
+                keywords = list(data['trends'].keys())[0]
+                data_indexes = data['trends'][keywords]
+                df = pd.DataFrame({'keywords':keywords,
+                                   'market':'全国',
+                                   'date':dates,
+                                   'data_index':data_indexes})
+                return df
+            except Exception as e:
+                print(e)
+                return None
 
-            region = '0' # 全国
-            category = '0'
-            keywords =  ['逍客']# 可变 
-            start = '2019-04-20'#  可变 >8天不能跑出数据
-            end = '2019-05-10'# 可变
-            is_hourly = '0' 
-            urls = TIFS.prepare_urls(start=start,end=end,period=7,keywords=keywords)
-            result = asyncio.run(TIFS.run_tasks(urls))
+        def delegate_sql_config(self):
+            host = 'localhost'
+            port = 3306
+            user = 'root'
+            password = ''
+            db = 'toutiao'
+            use_unicode = True
+            table = 'data_index'
+            variables = ['KEYWORDS','MARKET','DATE','DATA_INDEX']
+            replace = True
+            return host,port,user,password,db,use_unicode,table,variables,replace
+        
+        def get_date_list(self,sd_date,ed_date,period=15,timefmt=None):
+            # 得到日期的list[{sd_str,ed_str}]
+            date_list = []
+            count = (ed_date - sd_date).days // period + 1
+            for i in range(1,count+1):
+                date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
+                                  'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
+            date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
+            return date_list
+    
+        def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
+            urlformat = 'https://index.toutiao.com/api/keyword/trends?' \
+            'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
+            timefmt = '%Y-%m-%d'      
+            sd_date = datetime.datetime.strptime(start,timefmt)
+            ed_date = datetime.datetime.strptime(end,timefmt)
+            date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
+            urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
+                                     start=d['sd_str'].replace('-',''),
+                                     end=d['ed_str'].replace('-',''),
+                                     keyword=keyword) for d in date_list for keyword in keywords]
+            return urls
+        
+    def main():
+        import pprint
+        astime = 0
+        TIFS = ToutiaoIndexFetchStore(astime=astime)
+        
+        region = '0' # 全国
+        category = '0'
+        keywords =  ['逍客']# 可变 
+        start = '2019-04-20'#  可变 >8天不能跑出数据
+        end = '2019-05-20'# 可变
+        is_hourly = '0' 
+        urls = TIFS.prepare_urls(start=start,end=end,period=7,keywords=keywords)
+        result = asyncio.run(TIFS.run_tasks(urls))
+    
+        print('results:')
+        pprint.pprint(result)
 
-            print('results:')
-            pprint.pprint(result)
+        max_tries = 10
 
-            max_tries = 10
-
-            while TIFS.remain_urls:
-                print('=' * 40)
-                print(f'left tries is {max_tries}')
-                results = asyncio.run(TIFS.run_tasks(urls=TIFS.remain_urls,datas=TIFS.remain_datas))
-                max_tries -= 1
-                if not max_tries:
-                    break
-
-        main()
+        while TIFS.remain_urls:
+            print('=' * 40)
+            print(f'left tries is {max_tries}')
+            results = asyncio.run(TIFS.run_tasks(urls=TIFS.remain_urls,datas=TIFS.remain_datas))
+            max_tries -= 1
+            if not max_tries:
+                break
+    
+    main()
+    
+    if __name__ == '__main__':
+        from mytools_database import pymysql_tools
+        db = 'toutiao'
+        table = 'data_index'
+        df = pymysql_tools.get_df(db=db,table=table)
+        print(df)
+        # df.to_excel('toutiao.xlsx')
         --------------------------------------------------------------------
     """
     
@@ -235,7 +244,7 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         support function to prepare_data for store
         need rewrite the delegate_prepare_data(response)
         :param response: response from function fetch_url
-        :return: pandas.DataFrame from delegate_prepare_data(response)
+        :return: pandas.DataFrame from delegate_prepare_data(response) or list of datas
         """
         return self.delegate_prepare_data(response)
 
@@ -262,17 +271,24 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         :return: True if success, False if Exception occurs
         """
         try:
-            host,port,user,password,db,use_unicode,sql_template,table,variables = self.delegate_sql_config()
+            host,port,user,password,db,use_unicode,table,variables,replace = self.delegate_sql_config()
+            _1 = ','.join(variables)
+            _2 = ','.join(['%s'] * len(variables))
+            sql = f'INSERT INTO {table} ({_1}) VALUES ({_2});'
+            if replace:
+                sql=sql.replace('INSERT INTO','REPLACE',1) 
+            if isinstance(prepare_data,pd.DataFrame):
+                prepare_data = prepare_data.get_values().tolist()
             pool = await aiomysql.create_pool(host=host, port=port,
                                               user=user, password=password,
                                               db=db, use_unicode=use_unicode)
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    for row in prepare_data.get_values():
-                        data = [str(_) for _ in row]
-                        sql = sql_template%(table,','.join(variables),'","'.join(data))
-                        # breakpoint()
-                        await cur.execute(sql)
+                    try:
+                        await cur.executemany(sql,prepare_data)
+                    except:
+                        prepare_data = [list(map(str,_)) for _ in prepare_data]
+                        await cur.executemany(sql,prepare_data)
                     await conn.commit()
             pool.close()
             await pool.wait_closed()
@@ -302,112 +318,15 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         support function to prepare_data for store
         need rewrite
         :param response: response from function fetch_url
-        :return: pandas.DataFrame or list, False if Exception occurs
+        :return: pandas.DataFrame or list of datas, False if Exception occurs
         """
         raise NotImplementedError  
-                      
+
     def delegate_sql_config(self):
         """
         support function to set sql config
         need rewrite
-        :return: (host,port,user,password,db,use_unicode,sql,table,variables) in tuples
+        :return: (host,port,user,password,db,use_unicode,table,variables,replace) in tuples
         """
         raise NotImplementedError
-
-
-# In[41]:
-
-
-if __name__ == '__main__':
-    
-    class ToutiaoIndexFetchStore(AiohttpFrame_FetchStore):
-        
-        def delegate_prepare_data(self,response):
-            try:
-                data = json.loads(response)
-                start = data['trends_range']['start']
-                end = data['trends_range']['end']
-                dateindex = pd.date_range(start=start,end=end,freq='D')
-                keyword = list(data['trends'].keys())[0]
-                datas = data['trends'][keyword]
-                df = pd.DataFrame({'keyword':keyword,'date':dateindex,'data':datas})
-                return df
-            except Exception as e:
-                print(e)
-                return None
-
-        def delegate_sql_config(self):
-            host = 'localhost'
-            port = 3306
-            user = 'root'
-            password = 'Aaa11111'
-            db = 'toutiaoindex'
-            use_unicode = True
-            sql_template = 'REPLACE %s (%s) VALUES ("%s");'
-            table = 'data_toutiaoindex'
-            variables = ['KEYWORDS','DATE','TOUTIAO_INDEX']
-            return host,port,user,password,db,use_unicode,sql_template,table,variables
-        
-        def get_date_list(self,sd_date,ed_date,period=15,timefmt=None):
-            # 得到日期的list[{sd_str,ed_str}]
-            date_list = []
-            count = (ed_date - sd_date).days // period + 1
-            for i in range(1,count+1):
-                date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
-                                  'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
-            date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
-            return date_list
-    
-        def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
-            urlformat = 'https://index.toutiao.com/api/keyword/trends?'             'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
-            timefmt = '%Y-%m-%d'      
-            sd_date = datetime.datetime.strptime(start,timefmt)
-            ed_date = datetime.datetime.strptime(end,timefmt)
-            date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
-            urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
-                                     start=d['sd_str'].replace('-',''),
-                                     end=d['ed_str'].replace('-',''),
-                                     keyword=keyword) for d in date_list for keyword in keywords]
-            return urls
-        
-    def main():
-        import pprint
-        astime = 0
-        TIFS = ToutiaoIndexFetchStore(astime=astime)
-        
-        region = '0' # 全国
-        category = '0'
-        keywords =  ['逍客']# 可变 
-        start = '2019-04-20'#  可变 >8天不能跑出数据
-        end = '2019-05-10'# 可变
-        is_hourly = '0' 
-        urls = TIFS.prepare_urls(start=start,end=end,period=7,keywords=keywords)
-        result = asyncio.run(TIFS.run_tasks(urls))
-    
-        print('results:')
-        pprint.pprint(result)
-
-        max_tries = 10
-
-        while TIFS.remain_urls:
-            print('=' * 40)
-            print(f'left tries is {max_tries}')
-            results = asyncio.run(TIFS.run_tasks(urls=TIFS.remain_urls,datas=TIFS.remain_datas))
-            max_tries -= 1
-            if not max_tries:
-                break
-    
-    main()
-
-
-# In[1]:
-
-
-if __name__ == '__main__':
-    from mytools_database import pymysql_tools
-    db = 'toutiaoindex'
-    table = 'data_toutiaoindex'
-    df = pymysql_tools.get_df(db=db,table=table)
-    print(df)
-    # df.to_excel('toutiao.xlsx')
 

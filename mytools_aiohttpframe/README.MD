@@ -1,15 +1,11 @@
-**AiohttpFrame**
+AiohttpFrame
 
-- version: 0.0.2
-- update date: 2019-05-15
-- import: 
-	- from mytools_aiohttpframe import AiohttpFrame_FetchStore
+包含2个主要功能
 
-- files:
-	1. AiohttpFrame_Config.py
-	2. AiohttpFrame_Browser.py
-	3. AiohttpFrame_Login.py
-	4. AiohttpFrame_FetchStore.py
-	
-- remark:need to fill the AiohttpFrame_Config.py first
-- remark:need inherit class and fill the delegate_function
+AiohttpFrame_LoginTest.py
+测试cookie登入信息
+
+AiohttpFrame_FetchAndStore.py
+抓取和保存数据
+
+缺少对post的支持

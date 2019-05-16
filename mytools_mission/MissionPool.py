@@ -3,7 +3,7 @@
 
 # # MissionPool
 
-# In[1]:
+# In[2]:
 
 
 """
@@ -17,7 +17,7 @@ the decorator for mission, see the docs in the Class MissionLoop for detail
 import threading
 
 
-# In[2]:
+# In[11]:
 
 
 class MissionPool():
@@ -141,23 +141,23 @@ class MissionPool():
             md[m]['max_tries'] = md[m]['_max_tries']
         
         while self.stastic_dict(md=md,k='max_tries') and not self.stastic_dict(md=md,k='status') :
+            self.threadings = []
             for m in md:
                 if not md[m]['status'] and len(md[m]['pre_mission_names']):
                     if all(md[p]['status'] for p in md[m]['pre_mission_names']):
                         if md[m]['max_tries']:
                             t = threading.Thread(target=self.mission_run,kwargs={'md':md,'m':m})
                             self.threadings.append(t)
-                            t.start()
-                            md[m]['max_tries'] -= 1
                 elif not md[m]['status']:
                     if md[m]['max_tries']:
                         t = threading.Thread(target=self.mission_run,kwargs={'md':md,'m':m})
                         self.threadings.append(t)
-                        t.start()
-                        md[m]['max_tries'] -= 1
+            for t in self.threadings:
+                t.start()
             for t in self.threadings:
                 if t.isAlive():
                     t.join()
+                        
         else:
             print('-=' * 20) 
             print('mission_pool_run_done! and the report is:') 
@@ -190,6 +190,7 @@ class MissionPool():
         result = md[m]['func']()
         if result == md[m]['result_check']:
             md[m]['status'] = True
+        md[m]['max_tries'] -= 1
     
     def print_report(self,md=None):
         """
@@ -202,7 +203,7 @@ class MissionPool():
             
 
 
-# In[3]:
+# In[22]:
 
 
 # test of Mission Pool, with simple setting
@@ -220,15 +221,35 @@ if __name__ == '__main__':
         print('test_b')
         return False
 
-    @MP.decorater_add_mission(mission_name='c',pre_mission_names='c')
+    @MP.decorater_add_mission(mission_name='c',pre_mission_names=None)
     def test_func():
         print('test_c')
-        return True
+        from random import randint
+        data = randint(1,10)
+        if data % 2: 
+            return True
+        else:
+            return False
+    
+    @MP.decorater_add_mission(mission_name='d',pre_mission_names=None)
+    def test_func():
+        print('test_d')
+        from random import randint
+        data = randint(1,10)
+        if data % 2: 
+            return True
+        else:
+            return False
+    
+    @MP.decorater_add_mission(mission_name='e',pre_mission_names=None)
+    def test_func():
+        print('test_e')
+        return True      
     
     MP.mission_pool_run()
 
 
-# In[10]:
+# In[23]:
 
 
 # test of Mission Pool, with MissionLoop setting
@@ -308,7 +329,7 @@ if __name__ == '__main__':
     mission_pool_run()
 
 
-# In[4]:
+# In[24]:
 
 
 # MR test
