@@ -6,15 +6,14 @@
 # In[1]:
 
 
-
 """
 support tools for aiohttpframe, including chrome_path, cookies_jsonfile, defaultEncoding, headers 
     - tool_name: Aiohttp_Config
     - version: 0.0.2
     - update date: 2019-05-15
     - import: from mytools_aiohttpframe import AiohttpFrame_Config
+    - need fill the chrome_path
 """
-
 import os
 
 

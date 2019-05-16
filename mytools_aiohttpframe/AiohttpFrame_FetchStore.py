@@ -17,8 +17,6 @@ tools for aiohttpframe, see the docs in the Class AiohttpFrame_FetchStore for de
 import aiohttp
 import aiomysql
 import asyncio
-import datetime
-import json
 import pickle
 import pandas as pd
 import traceback
@@ -39,100 +37,7 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         - inherit the class and must finish 2 delegate function:
             - 1. delegate_prepare_data
             - 2. delegate_sql_config
-        - example:
-        --------------------------------------------------------------------
-        
-    class ToutiaoIndexFetchStore(AiohttpFrame_FetchStore):
-        
-        def delegate_prepare_data(self,response):
-            try:
-                data = json.loads(response)
-                start = data['trends_range']['start']
-                end = data['trends_range']['end']
-                dates = pd.date_range(start=start,end=end,freq='D')
-                keywords = list(data['trends'].keys())[0]
-                data_indexes = data['trends'][keywords]
-                df = pd.DataFrame({'keywords':keywords,
-                                   'market':'全国',
-                                   'date':dates,
-                                   'data_index':data_indexes})
-                return df
-            except Exception as e:
-                print(e)
-                return None
 
-        def delegate_sql_config(self):
-            host = 'localhost'
-            port = 3306
-            user = 'root'
-            password = ''
-            db = 'toutiao'
-            use_unicode = True
-            table = 'data_index'
-            variables = ['KEYWORDS','MARKET','DATE','DATA_INDEX']
-            replace = True
-            return host,port,user,password,db,use_unicode,table,variables,replace
-        
-        def get_date_list(self,sd_date,ed_date,period=15,timefmt=None):
-            # 得到日期的list[{sd_str,ed_str}]
-            date_list = []
-            count = (ed_date - sd_date).days // period + 1
-            for i in range(1,count+1):
-                date_list.append({'sd_str':(sd_date+datetime.timedelta(days=period*(i-1))).strftime(timefmt),
-                                  'ed_str':(sd_date+datetime.timedelta(days=period*(i)-1)).strftime(timefmt)}) 
-            date_list[-1]['ed_str'] = ed_date.strftime('%Y-%m-%d')  # 最后一组的最后一个日期 = EndDate
-            return date_list
-    
-        def prepare_urls(self,region='0',category='0',is_hourly='0',start=None,end=None,period=7,keywords=None):
-            urlformat = 'https://index.toutiao.com/api/keyword/trends?' \
-            'region={region}&category={category}&keyword={keyword}&start={start}&end={end}&is_hourly={is_hourly}'
-            timefmt = '%Y-%m-%d'      
-            sd_date = datetime.datetime.strptime(start,timefmt)
-            ed_date = datetime.datetime.strptime(end,timefmt)
-            date_list = self.get_date_list(sd_date,ed_date,period=period,timefmt=timefmt)
-            urls = [urlformat.format(region=region,category=category,is_hourly=is_hourly,
-                                     start=d['sd_str'].replace('-',''),
-                                     end=d['ed_str'].replace('-',''),
-                                     keyword=keyword) for d in date_list for keyword in keywords]
-            return urls
-        
-    def main():
-        import pprint
-        astime = 0
-        TIFS = ToutiaoIndexFetchStore(astime=astime)
-        
-        region = '0' # 全国
-        category = '0'
-        keywords =  ['逍客']# 可变 
-        start = '2019-04-20'#  可变 >8天不能跑出数据
-        end = '2019-05-20'# 可变
-        is_hourly = '0' 
-        urls = TIFS.prepare_urls(start=start,end=end,period=7,keywords=keywords)
-        result = asyncio.run(TIFS.run_tasks(urls))
-    
-        print('results:')
-        pprint.pprint(result)
-
-        max_tries = 10
-
-        while TIFS.remain_urls:
-            print('=' * 40)
-            print(f'left tries is {max_tries}')
-            results = asyncio.run(TIFS.run_tasks(urls=TIFS.remain_urls,datas=TIFS.remain_datas))
-            max_tries -= 1
-            if not max_tries:
-                break
-    
-    main()
-    
-    if __name__ == '__main__':
-        from mytools_database import pymysql_tools
-        db = 'toutiao'
-        table = 'data_index'
-        df = pymysql_tools.get_df(db=db,table=table)
-        print(df)
-        # df.to_excel('toutiao.xlsx')
-        --------------------------------------------------------------------
     """
     
     def __init__(self,chrome_path=None,cookies_jsonfile=None,headers=None,astime=None): 
