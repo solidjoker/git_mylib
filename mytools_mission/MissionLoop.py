@@ -3,7 +3,7 @@
 
 # # MissionLoop
 
-# In[12]:
+# In[1]:
 
 
 """
@@ -30,7 +30,7 @@ from mytools_sendmail import SendMail
 from mytools_sendmail import SendMail_config
 
 
-# In[13]:
+# In[7]:
 
 
 class MissionLoop():
@@ -199,6 +199,7 @@ class MissionLoop():
         content = 'Content: Mission {mission_name} {content}'
         content_next = 'Content: Mission {mission_name} {content} at {next_time}'
         reason = 'Reason: {reason}'
+        
         loop_dict = {
             'already': {
                 'subject': subject.format(subject='Already Run!',mission_name='{mission_name}',now='{now}'),
@@ -281,31 +282,30 @@ class MissionLoop():
                     self.send_p_mail(p_mission_name=p_mission_name,p_status=p_status,
                                      p_start_time=now,p_next_time=p_next_time,p_must_run=True)
                 # not must run
-                else:
-                    p_next_time = self.p_start_time
-                    s_next_time = datetime.datetime.strftime(p_next_time,'%Y-%m-%d %H:%M:%S')
-                    while True:
-                        now = datetime.datetime.now()
-                        if now > p_next_time:
-                            print(f'{p_mission_name} start!!!')
-                            p_next_time = self.update_next_time(next_time=p_next_time,interval=self.p_period)
-                            result = func(*args,**kwargs)
-                            if result == self.p_result_check:
-                                p_status = True
-                            else:
-                                p_status = False
-                            self.send_p_mail(p_mission_name=p_mission_name,p_status=p_status,
-                                             p_start_time=now,p_next_time=p_next_time)
-                            self.time_sleep(next_time=p_next_time) 
-                            try: 
-                                self.max_tries = self.p_max_tries
-                            except:
-                                pass
-                            try: 
-                                self.msg_flag = True
-                            except:
-                                pass
-                            continue 
+                p_next_time = self.p_start_time
+                s_next_time = datetime.datetime.strftime(p_next_time,'%Y-%m-%d %H:%M:%S')
+                while True:
+                    now = datetime.datetime.now()
+                    if now > p_next_time:
+                        print(f'{p_mission_name} start!!!')
+                        p_next_time = self.update_next_time(next_time=p_next_time,interval=self.p_period)
+                        result = func(*args,**kwargs)
+                        if result == self.p_result_check:
+                            p_status = True
+                        else:
+                            p_status = False
+                        self.send_p_mail(p_mission_name=p_mission_name,p_status=p_status,
+                                         p_start_time=now,p_next_time=p_next_time)
+                        self.time_sleep(next_time=p_next_time) 
+                        try: 
+                            self.max_tries = self.p_max_tries
+                        except:
+                            pass
+                        try: 
+                            self.msg_flag = True
+                        except:
+                            pass
+                        continue 
             return wrapper            
         return decorator_func   
     
@@ -487,7 +487,7 @@ if __name__ == '__main__':
 #     print(df)
 
 
-# In[ ]:
+# In[9]:
 
 
 if __name__ == '__main__':
@@ -501,7 +501,7 @@ if __name__ == '__main__':
     p_start_time = datetime.datetime.strftime(datetime.datetime.now() + datetime.timedelta(seconds=5),'%H:%M:%S')
     p_result_check=True
     p_must_run=True
-    ML.set_p_loop(p_period=p_period,p_start_time=p_start_time,p_result_check=True,p_must_run=None)
+    ML.set_p_loop(p_period=p_period,p_start_time=p_start_time,p_result_check=True,p_must_run=p_must_run)
     print(f'p_mission_name: {p_mission_name}')
     print(f'ML.p_start_time: {ML.p_start_time}')
     print(f'ML.p_start_time: {ML.p_start_time}')
@@ -511,17 +511,18 @@ if __name__ == '__main__':
 
     @ML.decorator_p_loop(p_mission_name=p_mission_name)
     def test_p_func_random(*args,**kwargs):
-        return False
+        # return False
         from random import randint
         data = randint(1,10)
         if data % 2: 
             return True
         else:
             return False
+        
     test_p_func_random('hello',world='world')
 
 
-# In[ ]:
+# In[8]:
 
 
 if __name__ == '__main__':

@@ -7,37 +7,31 @@
 # In[1]:
 
 
-"""
-tools for aiohttpframe, see the docs in the Class AiohttpFrame_FetchStore for detail
-    - tool_name: AiohttpFrame_FetchStore
-    - version: 0.0.2
-    - update date: 2019-05-15
-    - import: from mytools_aiohttpframe import AiohttpFrame_FetchStore
-"""
 import aiohttp
 import aiomysql
 import asyncio
-import pickle
 import pandas as pd
 import traceback
+import tqdm
+from collections import defaultdict
 
 from mytools_aiohttpframe.AiohttpFrame_Login import AiohttpFrame_Login
 
 
-# In[2]:
+# In[4]:
 
 
 class AiohttpFrame_FetchStore(AiohttpFrame_Login):
     """
     tools for aiohttpframe, see the docs in the Class AiohttpFrame_FetchStore for detail
         - tool_name: AiohttpFrame_FetchStore
-        - version: 0.0.2
+        - version: 0.0.3
+            - adjust delegate function with (*,**kwargs)
         - update date: 2019-05-15
         - import: from mytools_aiohttpframe import AiohttpFrame_FetchStore
         - inherit the class and must finish 2 delegate function:
             - 1. delegate_prepare_data
             - 2. delegate_sql_config
-
     """
     
     def __init__(self,chrome_path=None,cookies_jsonfile=None,headers=None,astime=None): 
@@ -54,31 +48,27 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             astime = 0.1
         self.astime = astime
         self.cookies = self.ab_load_cookies()
+        self.rerun = 1
              
-    async def run_tasks(self,urls=None,*,datas=None):
+    async def run_tasks(self,urls=None,datas=None,**kwargs):
         """
         main function to run tasks
         :param urls: urls
         :param datas: None for method get and datas for method post
         :return: (msg,result) in tuple
         """
-        self.set_tasks(urls=urls,datas=datas)
-        loop_tasks = []
-        for task_id in self.tasks_status:
-            if not self.tasks_status[task_id]['status']:
-                if self.astime > 0:
-                    await asyncio.sleep(self.astime)
-                task = asyncio.ensure_future(self.run_task(task_id=task_id,
-                                                           url=self.tasks_status[task_id]['url'],
-                                                           data=self.tasks_status[task_id]['data']))
-                if self.astime > 0:
-                    await task
-                loop_tasks.append(task)
-        result = await asyncio.wait(loop_tasks)
-        status = self.report_summary()
-        return status, result        
-      
-    def set_tasks(self,urls=None,*,datas=None):
+        self.set_tasks(urls=urls,datas=datas,**kwargs)
+        status = False
+        while not status:
+            status,result = await self._run_tasks()
+            if self.rerun > 0:
+                print(f'Reruning, and left {self.rerun} tries!')
+                self.rerun -= 1
+            else:
+                break
+        return status, result
+    
+    def set_tasks(self, urls=None, datas=None, **kwargs):
         """
         init the tasks_status and remain_urls for track the tasks
         :param urls: urls
@@ -92,12 +82,43 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             asyncio.set_event_loop(loop)
         if not datas:
             datas = [None] * len(urls)
-        self.tasks_status = {task_id:{'url':url,'data':data,'response':None,'stored':None,'status':None} 
-                             for task_id,(url,data) in enumerate(zip(urls,datas))}
-        self.remain_urls = []
-        self.remain_datas = []
+
+        self.tasks_status = {
+            task_id:{
+                'params':{
+                    'url':url,
+                    'data':data,},
+                'response':None,
+                'stored':None,
+                'status':None} 
+            for task_id,(url,data) in enumerate(zip(urls,datas))
+        }
+        if kwargs:
+            kwargs_dict = defaultdict(dict)
+            for k in kwargs:
+                for task_id,v in enumerate(kwargs[k]):
+                    kwargs_dict[task_id].update({k:v})
+            for _ in self.tasks_status:
+                self.tasks_status[_]['params'].update(kwargs_dict[_])
     
-    async def run_task(self,task_id=None,url=None,*,data=None):
+        self.remain_task_ids = [] 
+    
+    async def _run_tasks(self):
+        loop_tasks = []
+        for task_id in tqdm.tqdm(self.tasks_status):
+            if not self.tasks_status[task_id]['status']:
+                if self.astime > 0:
+                    await asyncio.sleep(self.astime)
+                task = asyncio.ensure_future(self.run_task(task_id=task_id,
+                                                           **self.tasks_status[task_id]['params']))
+                if self.astime > 0:
+                    await task
+                loop_tasks.append(task)
+        result = await asyncio.wait(loop_tasks)
+        status = self.report_summary()
+        return status, result
+    
+    async def run_task(self,task_id=None,url=None,data=None,**kwargs):
         """
         function to run task
         :param task_idl: task_id for record         
@@ -108,21 +129,17 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         print(f'task_id {task_id} is running!')
         async with aiohttp.ClientSession(headers=self.headers,cookies=self.cookies) as session:
             response = await self.fetch_url(session=session,url=url,data=data)     
-            prepare_data = await self.prepare_data(response)
+            prepare_data = await self.prepare_data(response,**kwargs)
             if self.check_prepare_data(prepare_data):
                 self.tasks_status[task_id]['status'] = True
                 self.tasks_status[task_id]['response'] = prepare_data
                 storedata = await self.store_data(prepare_data)
-                if not storedata:
+                if storedata:
                     self.tasks_status[task_id]['stored'] = True
                 status = True
             else:
-                self.remain_urls.append(self.tasks_status[task_id]['url'])
-                self.remain_datas.append(self.tasks_status[task_id]['data'])
+                self.remain_task_ids.append(task_id)
                 status = False
-            print('-' * 40)
-            print(f'task_id:{task_id} - storedata: {storedata}')    
-            print(f'task_id:{task_id} - status: {status}')
             return status
     
     async def fetch_url(self,session=None, url=None, *, data=None):
@@ -144,14 +161,14 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             traceback.print_exc()
             return None
     
-    async def prepare_data(self,response=None):
+    async def prepare_data(self,response=None,**kwargs):
         """
         support function to prepare_data for store
         need rewrite the delegate_prepare_data(response)
         :param response: response from function fetch_url
         :return: pandas.DataFrame from delegate_prepare_data(response) or list of datas
         """
-        return self.delegate_prepare_data(response)
+        return self.delegate_prepare_data(response=response,**kwargs)
 
     def check_prepare_data(self,prepare_data=None):
         """
@@ -203,22 +220,17 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             return False
 
     def report_summary(self):
-        count_remain = len(self.remain_urls)
+        count_remain = len(self.remain_task_ids)
         count_total = len(self.tasks_status)
         if not count_remain:
             print(f'All of total {count_total} missions success!')
             return True
         else:     
             print(f'All of total {count_total} missions\n'                  f'{count_total-count_remain} success! {count_remain} failed!')
-            remain_urls_pkl = 'remain_urls.pkl'
-            remain_datas_pkl = 'remain_datas.pkl'
-            pickle.dump(self.remain_urls,open(remain_urls_pkl,'wb'))
-            pickle.dump(self.remain_datas,open(remain_datas_pkl,'wb'))
-            print(f'check the {remain_urls_pkl} and {remain_datas_pkl}')
-            print(f'or asyncio.run(self.run_tasks(urls=self.remain_urls,datas=self.remain_datas)) again!')
+            print(f'asyncio.run(self.run_tasks(urls=self.remain_urls,datas=self.remain_datas)) again!')
             return False                
                       
-    def delegate_prepare_data(self,response=None):
+    def delegate_prepare_data(self,response=None,**kwargs):
         """
         support function to prepare_data for store
         need rewrite
