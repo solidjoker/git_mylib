@@ -7,13 +7,15 @@
 # - [官方文档 - aiomysql](https://aiomysql.readthedocs.io/en/latest/)
 # - [其他参考 数据备份、pymysql模块](https://www.cnblogs.com/linhaifeng/articles/7525619.html)
 
-# In[4]:
+# In[1]:
 
 
 """
 - tool_name: pymysql_tools
-- version: 0.0.1
-- date: 2019-05-09
+- version: 0.0.2
+    - add module_config to specificate mysql_config
+    - add param aio for select running model
+- date: 2019-05-20
 - import: from mytools_database import pymysql_tools
 - requirements: pymysql_config with username etc...
 - remark: with asyncio and aiomysql
@@ -24,88 +26,92 @@
         general func for tools
         :return: True if success; False if error 
         
-    2. get_mysql_config():
+    2. get_mysql_config(module_config=None,**kwargs):
         
         general func for get mysql_config dict
         :return: mysql_config as dictionary
     
-    3. async def execute_sql(db=None, sql=None, params=None, many=None, exception_warning=None):
+    3. async def execute_sql_aio(module_config=None,db=None,sql=None,params=None,many=None,exception_warning=None):
     
         cursor.execute[many]_sql(sql, [params]) in db, in asyncio
         :return: cursor.fetchall() if success; False if error 
-
-    4. get_databases(exception_warning=None)
+        
+    4. def execute_sql(module_config=None,db=None,sql=None,params=None,many=None,exception_warning=None):
+    
+        cursor.execute[many]_sql(sql, [params]) in db
+        :return: cursor.fetchall() if success; False if error 
+        
+    5. get_databases(module_config=None,exception_warning=None,aio=True)
 
         to show databases in mysql
         :return: databases in list 
         
-    5. create_database(db=None,exception_warning=None):
+    6. create_database(module_config=None,db=None,exception_warning=None,aio=True)
         
         create a new database named db
         :return: True if success; False if error
         
-    6. drop_database(db=None,exception_warning=None):
+    7. drop_database(module_config=None,db=None,exception_warning=None,aio=True)
 
         drop database named db
         :return: True if success; False if error
             
-    7. get_tables(db=None, exception_warningg=None)
+    8. get_tables(module_config=None,db=None,exception_warning=None,aio=True)
 
          get table list from db
         :return: list of all tables in db; False if error 
 
-    8. drop_table(db=None, table=None, exception_warningg=None)
+    9. drop_table(module_config=None,db=None,table=None,exception_warning=None,aio=True)
 
         drop table from db
         :return: True if success; False if error 
 
-    9. get_table_infos(db=None, table=None, exception_warningg=None)
+    10. get_table_infos(module_config=None,db=None,table=None,exception_warning=None,aio=True)
 
         same as desc_table
         :return: ('Field','Type','Null','Key','Default','Extra'); False if error 
 
-
-    10. desc_table(db=None, table=None, exception_warning=None):
+    11. desc_table(module_config=None,db=None,table=None,exception_warning=None,aio=True)
         
         get table structure in db
         :return: ('Field','Type','Null','Key','Default','Extra'); False if error 
 
-    11. get_table_variables(db=None, table=None)
+    12. get_table_variables(module_config=None,db=None,table=None,exception_warning=None,aio=True)
 
         get variables from table in dict format
         :return: variables dict of ('all','primary_keys','not_primary_keys'); False if error
 
-    12. get_table_rows(db=None, table=None, exception_warning=None)
+    13. get_table_rows(module_config=None,db=None,table=None,exception_warning=None,aio=True)
 
         get count of rows of table data
         :return: count of rows; False if error
 
-    13. insert_data(db=None, table=None, data=None, many=None, replace=None, exception_warning=None)
+    14. insert_data(module_config=None,db=None,table=None,data=None,many=None,replace=None,exception_warning=None,aio=True)
         
         insert data or datas with many into table
         :return: True if success; False if error  
 
-    14. get_df(db=None, table=None, exception_warningg=None)
+    15. get_df(module_config=None,db=None,table=None,exception_warning=None)
         
         get df from table
         return: df; False if error    
         
-    15. get_df_where(db=None, table=None, where=None, exception_warningg=None)
+    16. get_df_where(module_config=None,db=None,table=None,where=None,exception_warning=None)
         
         get df from table, where is the namedtuple('WHERE',['variable','condition'])
         :return: df; False if error   
 
-    16. delete_data(db=None, table=None, exception_warningg=None)
+    17. delete_data(module_config=None,db=None,table=None,exception_warning=None,aio=True)
 
         delete all data in table
         :return  
         
-    17. delete_data_where(db=None, table=None, where=None, exception_warningg=None)
+    18. delete_data_where(module_config=None,db=None,table=None,where=None,exception_warning=None,aio=True)
     
         delete all data in table, where is the namedtuple('WHERE',['variable','condition'])
         return: True if success; False if error   
         
-    18. select_all(db=None, table=None, exception_warning=None)
+    19. select_all(module_config=None,db=None,table=None,exception_warning=None,aio=True)
         select all from table
         :return: list; False if error 
         
@@ -118,7 +124,7 @@ import pymysql
 import pandas as pd
 from collections import namedtuple
 
-import pymysql_config
+import pymysql_config as default_config
 
 
 # In[2]:
@@ -138,21 +144,35 @@ def assert_item(item=None, info=None):
         print(info)
         return False
 
-def get_mysql_config():
+def get_mysql_config(module_config=None,**kwargs):
     """
     general func for get mysql_config dict
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                          if None, use the pymysql_config as default, else use the module
+    :param **kwargs: ['user','password','host','port','use_unicode']
     :return: mysql_config as dictionary
     """
-    mysql_config = dict(user=pymysql_config.user,
-                        password=pymysql_config.password,
-                        host=pymysql_config.host,
-                        port=pymysql_config.port,
-                        use_unicode=pymysql_config.use_unicode)
-    return mysql_config
-
-async def execute_sql(db=None, sql=None, params=None, many=None, exception_warning=None):
+    if not module_config and kwargs:
+        mysql_config = {}
+        for _ in ['user','password','host','port','use_unicode']:
+            mysql_config[_] = kwargs.get(_,None)
+        return mysql_config
+    
+    elif not module_config:
+        module_config = default_config
+        
+    mysql_config = dict(user=module_config.user,
+                        password=module_config.password,
+                        host=module_config.host,
+                        port=module_config.port,
+                        use_unicode=module_config.use_unicode)
+    return mysql_config        
+    
+async def execute_sql_aio(module_config=None,db=None,sql=None,params=None,many=None,exception_warning=None):
     """
     cursor.execute[many]_sql(sql, [params]) in db, in asyncio
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                          if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param sql: sql 
     :param params: data or datas with many
@@ -160,7 +180,7 @@ async def execute_sql(db=None, sql=None, params=None, many=None, exception_warni
     :param exception_warning: True for print exception
     :return: cursor.fetchall() if success; False if error 
     """
-    mysql_config = get_mysql_config()
+    mysql_config = get_mysql_config(module_config=module_config)
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -190,40 +210,91 @@ async def execute_sql(db=None, sql=None, params=None, many=None, exception_warni
         pool.close()
         await pool.wait_closed()
 
-def get_databases(exception_warning=None):
+def execute_sql(module_config=None,db=None,sql=None,params=None,many=None,exception_warning=None):
+    """
+    cursor.execute[many]_sql(sql, [params]) in db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                          if None, use the pymysql_config as default, else use the module
+    :param db: database name
+    :param sql: sql 
+    :param params: data or datas with many
+    :param many: True for executemany
+    :param exception_warning: True for print exception
+    :return: cursor.fetchall() if success; False if error 
+    """
+    mysql_config = get_mysql_config(module_config=module_config)
+    if not db:
+        conn = pymysql.connect(**mysql_config)
+    else:
+        conn = pymysql.connect(database=db, **mysql_config)
+    try:
+        cursor = conn.cursor()
+        if params and many:
+            cursor.executemany(sql,params)
+        elif params:
+            cursor.execute(sql,params)
+        else:
+            cursor.execute(sql)
+        result = cursor.fetchall()
+        conn.commit() # 提交
+        return result
+    except Exception as e:
+        if exception_warning:
+            print(e)
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_databases(module_config=None,exception_warning=None,aio=True):
     """
     to show databases in mysql
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: databases in list 
     """
     sql = 'SHOW DATABASES'
-    result = asyncio.run(execute_sql(sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False
     dbs = [_[0] for _ in result]
     return dbs
 
-def create_database(db=None,exception_warning=None):
+def create_database(module_config=None,db=None,exception_warning=None,aio=True):
     """
     create a new database named db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error
     """
     if not assert_item(item=db, info='no db input'):
         return False
     sql = f'CREATE DATABASE {db} DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_general_ci'
-    result = asyncio.run(execute_sql(sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,sql=sql, exception_warning=exception_warning)
     if result == False:
         return False
     print(f'Database {db} Created!')
     return True
 
-def drop_database(db=None,exception_warning=None):
+def drop_database(module_config=None,db=None,exception_warning=None,aio=True):
     """
     drop database named db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error
     """
     if not assert_item(item=db, info='no db input'):
@@ -233,33 +304,46 @@ def drop_database(db=None,exception_warning=None):
         return False
     
     sql = f'DROP DATABASE {db}'
-    result = asyncio.run(execute_sql(sql=sql,exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,sql=sql, exception_warning=exception_warning)
     if result == False:
         return False
     
     print(f'Database {db} has been dropped!')
     return True 
 
-def get_tables(db=None, exception_warning=None):
+def get_tables(module_config=None,db=None,exception_warning=None,aio=True):
     """
     get tables list from db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: list of all tables in db; False if error 
     """
     sql = "SHOW TABLES;"
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False  
     tables = [_[0] for _ in result]
     return tables
 
-def drop_table(db=None, table=None, exception_warning=None):
+def drop_table(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     drop table from db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error 
     """
     if not assert_item(item=table, info='no table input'):
@@ -267,49 +351,67 @@ def drop_table(db=None, table=None, exception_warning=None):
     if not input(f'Please input y to confirm to delete the Table {table} in {db}\n') == 'y':
         return False
     sql = f'DROP TABLE {table};'
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False
     print(f'Table {table} has been dropped!')
     return True
 
-def get_table_infos(db=None, table=None, exception_warning=None):
+def get_table_infos(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     same as desc_table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: ('Field','Type','Null','Key','Default','Extra'); False if error 
     """
-    return desc_table(db=db, table=table, exception_warning=exception_warning)
+    return desc_table(module_config=module_config,db=db,table=table,exception_warning=exception_warning,aio=aio)
 
-def desc_table(db=None, table=None, exception_warning=None):
+def desc_table(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     get table structure in db
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                      if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: ('Field','Type','Null','Key','Default','Extra'); False if error 
     """
     if not assert_item(item=table, info='no table input'):
         return False  
     sql = f"DESC {table};"
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False
     return result
 
-def get_table_variables(db=None, table=None):
+def get_table_variables(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     get variables from table in dict format
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: variables dict of ('all','primary_keys','not_primary_keys','auto_increment'); False if error
     """
     if not assert_item(item=table, info='no table input'):
         return False  
-    fields = get_table_infos(db=db, table=table)
+    fields = get_table_infos(module_config=module_config,
+                             db=db,table=table,exception_warning=exception_warning,aio=aio)
     if not assert_item(item=fields, info=f'no fields in {table}'):
         return False
     variables = {}
@@ -319,26 +421,35 @@ def get_table_variables(db=None, table=None):
     variables['auto_increment'] = [field[0] for field in fields if field[5] =='auto_increment']
     return variables  
 
-def get_table_rows(db=None, table=None, exception_warning=None):
+def get_table_rows(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     get count of rows of table data
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: count of rows; False if error
     """
     if not assert_item(item=table, info='no table input'):
         return False  
     sql = f'SELECT * FROM {table};'
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False        
     return len(result)
 
-def insert_data(db=None, table=None, data=None, many=None, 
-                auto_increment=None, replace=None, exception_warning=None):
+def insert_data(module_config=None,db=None,table=None,data=None,many=None, 
+                auto_increment=None,replace=None,exception_warning=None,aio=True):
     """
     insert data or datas with many into table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param data: data or datas with many
@@ -346,6 +457,7 @@ def insert_data(db=None, table=None, data=None, many=None,
     :param many: True for executemany
     :param replace: Replace into the table
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error 
     """
     if not assert_item(item=table, info='no table input'):
@@ -353,7 +465,7 @@ def insert_data(db=None, table=None, data=None, many=None,
     if not assert_item(item=data, info='no data input'):
         return False  
     
-    variables = get_table_variables(db=db, table=table)
+    variables = get_table_variables(module_config=module_config,db=db,table=table,aio=aio)
     if not auto_increment:
         variables = variables['all']
     else:
@@ -367,14 +479,22 @@ def insert_data(db=None, table=None, data=None, many=None,
     sql = f'INSERT INTO {table} ({_1}) VALUES ({_2});'
     if replace:
         sql=sql.replace('INSERT INTO','REPLACE',1)
-    print(sql)
-    result = asyncio.run(execute_sql(db=db,sql=sql,params=data,many=many,exception_warning=exception_warning))
+    # print(sql)
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,params=data,many=many,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,
+                             db=db,sql=sql,params=data,many=many,exception_warning=exception_warning)
     if result == False:
         return False        
     return True    
 
-def get_df(db=None, table=None, exception_warning=None):
+def get_df(module_config=None,db=None,table=None,exception_warning=None):
     """
+    get df from table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db:
     :param table:
     :param exception_warning: True for print exception
@@ -384,7 +504,7 @@ def get_df(db=None, table=None, exception_warning=None):
         return False
     if not assert_item(item=table, info='no table input'):
         return False
-    mysql_config = get_mysql_config()
+    mysql_config = get_mysql_config(module_config=module_config)
     conn = pymysql.connect(**mysql_config, database=db)
     sql = f'SELECT * from {table}'
     df = pd.read_sql(sql,conn)
@@ -398,9 +518,11 @@ def get_df(db=None, table=None, exception_warning=None):
     finally:
         conn.close()
 
-def get_df_where(db=None, table=None, where=None, exception_warning=None):
+def get_df_where(module_config=None,db=None,table=None,where=None,exception_warning=None):
     """
     get df from table, where is the namedtuple('WHERE',['variable','condition'])
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param where: eg..WHERE = namedtuple('WHERE',['variable','condition']); where = WHERE('AUTORUN_NAME',['funcB'])
@@ -413,9 +535,8 @@ def get_df_where(db=None, table=None, where=None, exception_warning=None):
         return False
     if not where: # if no where
         print(f'where is {where} and return all')
-        return get_df(db=db, table=table, exception_warning=exception_warning)    
-    
-    mysql_config = get_mysql_config()
+        return get_df(module_config=module_config,db=db,table=table,exception_warning=exception_warning)    
+    mysql_config = get_mysql_config(module_config=module_config)
     conn = pymysql.connect(**mysql_config, database=db)
     variable = where.variable
     condition = [str(_) for _ in where.condition]
@@ -432,12 +553,15 @@ def get_df_where(db=None, table=None, where=None, exception_warning=None):
     finally:
         conn.close()
 
-def delete_data(db=None, table=None, exception_warning=None):
+def delete_data(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     delete all data in table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error    
     """
     if not assert_item(item=table, info='no table input'):
@@ -447,26 +571,33 @@ def delete_data(db=None, table=None, exception_warning=None):
         return False
 
     sql = f'DELETE FROM {table};'
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning) 
     if result == False:
         return False
     print(f'Data in Table {table} has been deleted!')
     return True 
 
-def delete_data_where(db=None, table=None, where=None, exception_warning=None):
+def delete_data_where(module_config=None,db=None,table=None,where=None,exception_warning=None,aio=True):
     """
     delete all data in table, where is the namedtuple('WHERE',['variable','condition'])
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param where: eg..WHERE = namedtuple('WHERE',['variable','condition']); where = WHERE('AUTORUN_NAME',['funcB'])
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: True if success; False if error  
     """
     if not assert_item(item=table, info='no table input'):
         return False    
     
     if not where: # if no where
-        return delete_data(db=db, table=table, exception_warning=exception_warning)   
+        return delete_data(module_config=module_config,db=db,table=table,exception_warning=exception_warning,aio=aio)   
     
     variable = where.variable
     condition = [str(_) for _ in where.condition]
@@ -477,30 +608,41 @@ def delete_data_where(db=None, table=None, where=None, exception_warning=None):
         return False
     
     sql = f'DELETE FROM {table} WHERE {variable} IN ("{condition}")'
-    result = asyncio.run(execute_sql(db=db, sql=sql, exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)
     if result == False:
         return False
     print(f'Data of {variable} if {condition} in Table {table} has been deleted!')
     return True
   
-def select_all(db=None, table=None, exception_warning=None):
+def select_all(module_config=None,db=None,table=None,exception_warning=None,aio=True):
     """
     select all from table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
     :param db: database name
     :param table: table name
     :param exception_warning: True for print exception
+    :param aio: True in aio model
     :return: list; False if error   
     """
     if not assert_item(item=table, info='no table input'):
         return False    
     sql = f'SELECT * FROM {table};'
-    result = asyncio.run(execute_sql(db=db,sql=sql,exception_warning=exception_warning))
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)    
     if result == False:
         return False
     return result
 
 
-# In[3]:
+# In[4]:
 
 
 if __name__ == '__main__':
@@ -515,7 +657,7 @@ if __name__ == '__main__':
     print('-'*40)
     print('Example of async execute_sql:\n')    
     sql = 'SHOW DATABASES'
-    result = asyncio.run(execute_sql(sql=sql))
+    result = asyncio.run(execute_sql_aio(sql=sql))
     pprint.pprint(result)
     
     print('-'*40)
@@ -615,6 +757,16 @@ if __name__ == '__main__':
     result = insert_data(db=db, table=table, data=data, auto_increment=True, exception_warning=True)
     print(result)
 
+    print('-'*40)
+    print('example of insert_data pd.DataFrame with many and replace\n') 
+    db = 'test'
+    table = 'product'
+    import pandas as pd
+    df = pd.DataFrame({'ID':[5,6],'Name':['5','6']})
+    data = df.get_values().tolist()
+    result = insert_data(db=db, table=table, data=data, many=True, replace=True, exception_warning=True)
+    print(result)
+    
     print('-'*40)
     print('example of get_table_rows\n') 
     db = 'test'
