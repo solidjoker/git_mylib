@@ -3,7 +3,7 @@
 
 # # MissionRecord
 
-# In[2]:
+# In[1]:
 
 
 """
@@ -22,7 +22,7 @@ import os
 from mytools_database import sqlite3_tools
 
 
-# In[3]:
+# In[25]:
 
 
 class MissionRecord:
@@ -206,7 +206,11 @@ class MissionRecord:
         try:
             if not date:
                 date = datetime.date.today().isoformat()
-            return df[df['Period']==date]['Count'].iloc[0]
+                if df[df['Period']==date].empty:
+                    result = 0
+                else:
+                    result = df[df['Period']==date]['Count'].iloc[0]
+            return result
         except Exception as e:
             print(e)
             return False

@@ -127,7 +127,7 @@ from collections import namedtuple
 import pymysql_config as default_config
 
 
-# In[2]:
+# In[78]:
 
 
 def assert_item(item=None, info=None):
@@ -205,6 +205,8 @@ async def execute_sql_aio(module_config=None,db=None,sql=None,params=None,many=N
     except Exception as e:
         if exception_warning:
             print(e)
+        async with pool.acquire() as conn:
+            await conn.rollback()
         return False
     finally:
         pool.close()
@@ -241,6 +243,7 @@ def execute_sql(module_config=None,db=None,sql=None,params=None,many=None,except
     except Exception as e:
         if exception_warning:
             print(e)
+        conn.rollback()
         return False
     finally:
         cursor.close()
@@ -641,8 +644,52 @@ def select_all(module_config=None,db=None,table=None,exception_warning=None,aio=
         return False
     return result
 
+def select_where(module_config=None,db=None,table=None,src_columns=None,tar_columns=None,
+                 items=None,exception_warning=None,aio=True):
+    """
+    select all from table
+    :param module_config: include the ['user','password','host','port','use_unicode'], 
+                  if None, use the pymysql_config as default, else use the module
+    :param db: database name
+    :param table: table name
+    :param exception_warning: True for print exception
+    :param aio: True in aio model
+    :return: list; False if error   
+    """
+    if not assert_item(item=table, info='no table input'):
+        return False
+    if tar_columns:
+        sql = f"SELECT {','.join(tar_columns)} FROM {table} "
+    else:
+        sql = f"SELECT * FROM {table} "
+    where = 'WHERE %s ;'%(" AND ".join([src_column + " = \"" + item + "\"" for (src_column,item) in zip(src_columns,items)]))
+    sql += where
+    if aio:
+        result = asyncio.run(execute_sql_aio(module_config=module_config,
+                                             db=db,sql=sql,exception_warning=exception_warning))
+    else:
+        result = execute_sql(module_config=module_config,db=db,sql=sql,exception_warning=exception_warning)    
+    if result == False:
+        return False
+    return result
 
-# In[4]:
+def vlookup_individual(module_config=None,db=None,table=None,src_column=None,tar_column=None,item=None,
+                       exception_warning=None):
+    result = select_where(module_config=module_config,db=db,table=table,
+                          src_columns=[src_column],tar_columns=[tar_column],items=[item],exception_warning=exception_warning)
+    return result
+    try:
+        df = get_df(module_config=module_config,db=db,table=table,exception_warning=exception_warning)
+        return df[df[src_column] == item][tar_column].values[0]
+    except Exception as e:
+        print(e)
+        return None
+    
+ #       df[df[df[['ID','Name']] == [3,'e']].apply(lambda row: 
+ # False if pd.isna(row['ID']) and pd.isna(row['Name']) else True,axis=1)]
+
+
+# In[5]:
 
 
 if __name__ == '__main__':
@@ -813,4 +860,27 @@ if __name__ == '__main__':
     table = 'product'
     result = select_all(db=db, table=table, exception_warning=True)
     print(result)
+
+
+# In[79]:
+
+
+if __name__ == '__main__':
+    print('-'*40)
+    print('Example of select_where:\n')
+    db = 'baidu'
+    table = 'data_word_search_index'
+    src_columns = ['AREA','WORD']
+    tar_columns = ['DATE']
+    items = ['全国','ali']
+    result = select_where(db=db,table=table,src_columns=src_columns,tar_columns=tar_columns,items=items)
+    print(result[0])
+    
+    print('-'*40)
+    print('Example of vlookup_individual:\n')
+    src_column = 'AREA'
+    tar_column = 'DATE'
+    item = '全国'
+    result = vlookup_individual(db=db,table=table,src_column=src_column,tar_column=tar_column,item=item)
+    print(result[0])
 

@@ -4,7 +4,7 @@
 # # AiohttpFrame_FetchStore
 # - [aiohttp使用参考](https://www.jianshu.com/p/3de5c3626012)
 
-# In[2]:
+# In[10]:
 
 
 import aiohttp
@@ -13,20 +13,24 @@ import asyncio
 import pandas as pd
 import traceback
 import tqdm
+import csv
+import os
+
 from collections import defaultdict
 
 from mytools_aiohttpframe.AiohttpFrame_Login import AiohttpFrame_Login
 
 
-# In[28]:
+# In[12]:
 
 
 class AiohttpFrame_FetchStore(AiohttpFrame_Login):
     """
     tools for aiohttpframe, see the docs in the Class AiohttpFrame_FetchStore for detail
         - tool_name: AiohttpFrame_FetchStore
-        - version: 0.0.3
-            - adjust delegate function with (*,**kwargs)
+        - version: 0.0.4
+            - adjust store_data
+            - add open_daily_file
         - update date: 2019-05-15
         - import: from mytools_aiohttpframe import AiohttpFrame_FetchStore
         - inherit the class and must finish 2 delegate function:
@@ -51,27 +55,29 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         self.astime = astime
         if chances == None:
             self.chances = 3
-            
+    
         try:
             asyncio.get_running_loop()
         except:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+        
+        self.open_daily_report = True
+        self.daily_report_name = 'needfillin.txt'
     
     async def run(self,*args,**kwargs):
         params = self.delegate_set_tasks(*args,**kwargs)
-        self._set_tasks(**params)
-        return await self._run_tasks()
-        # status,result = await self._run_tasks()
-        # return status, result
+        if params:
+            self._set_tasks(**params)
+            return await self._run_tasks()
+        else:
+            return True, True
     
     async def run_again(self,chances=None):
         if chances == None:
             chances = 3
         self.chances = chances
         return await self._run_tasks()
-        # status,result = await self._run_tasks()
-        # return status, result
         
     async def run_tasks(self,urls=None,datas=None,**kwargs):
         """
@@ -82,8 +88,6 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         """        
         self._set_tasks(urls=urls,datas=datas,**kwargs)
         return await self._run_tasks()
-        # status,result = await self._run_tasks()
-        # return status, result
     
     def _set_tasks(self, urls=None, datas=None, **kwargs):
         """
@@ -100,10 +104,10 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
                     'url':url,
                     'data':data,},
                 'prepared_data':None,
-                'stored':None,
                 'status':None} 
             for task_id,(url,data) in enumerate(zip(urls,datas))
         }
+        
         if kwargs:
             kwargs_dict = defaultdict(dict)
             for k in kwargs:
@@ -128,7 +132,9 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
                     loop_tasks.append(task)
             result = await asyncio.wait(loop_tasks)
             status = self.summary_status()
+            await self.store_data()
             self.chances -= 1
+            await asyncio.sleep(0.1)
         return status, result
 
     async def run_task(self,task_id=None,url=None,data=None,**kwargs):
@@ -139,16 +145,13 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
         :param data: None for method get and data for method post
         :return: True if success
         """
-        print(f'task_id {task_id} is running!')
+        # print(f'task_id {task_id} is running!')
         async with aiohttp.ClientSession(headers=self.headers,cookies=self.cookies) as session:
             response = await self.fetch_url(session=session,url=url,data=data)     
             prepared_data = await self.prepare_data(response,**kwargs)
             if self.check_prepared_data(prepared_data):
                 self.tasks_status[task_id]['status'] = True
                 self.tasks_status[task_id]['prepared_data'] = prepared_data
-                storedata = await self.store_data(prepared_data)
-                if storedata:
-                    self.tasks_status[task_id]['stored'] = True
                 status = True
             else:
                 status = False
@@ -197,11 +200,10 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
                 result = None
         return result
                       
-    async def store_data(self,prepared_data=None):
+    async def store_data(self,datas=None):
         """
         function to store prepare_data
         need rewrite the delegate_sql_config()
-        :param prepare_data: prepare data for store
         :return: True if success, False if Exception occurs
         """
         try:
@@ -210,12 +212,35 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             _2 = ','.join(['%s'] * len(variables))
             sql = f'INSERT INTO {table} ({_1}) VALUES ({_2});'
             if replace:
-                sql=sql.replace('INSERT INTO','REPLACE',1) 
-            if isinstance(prepared_data,pd.DataFrame):
-                prepared_data = prepared_data.get_values().tolist()
+                sql=sql.replace('INSERT INTO','REPLACE',1)
+                
+            if isinstance(datas,pd.DataFrame):
+                prepared_data = datas.get_values().tolist()
+            elif not datas:
+                datas = [self.tasks_status[_]['prepared_data'] 
+                         for _ in self.tasks_status if self.tasks_status[_]['status']]
+                if isinstance(datas[0],pd.DataFrame):
+                    prepared_data = pd.concat(datas).get_values().tolist()
+                else:
+                    # prepared_data = datas
+                    prepared_data = []
+                    for _ in datas:
+                        for __ in _:
+                            prepared_data.append(__)
+                
+            if self.open_daily_report:
+                try:
+                    await self._open_daily_report(prepared_data)            
+                except Exception as e:
+                    print(e)
+                    print('open_daily_report error')
+                    
             pool = await aiomysql.create_pool(host=host, port=port,
                                               user=user, password=password,
                                               db=db, use_unicode=use_unicode)
+#             print('aiohttpframe_check:')
+#             print(sql)
+#             print(prepared_data)
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     try:
@@ -233,7 +258,8 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
 
     def summary_status(self):
         count_total = len(self.tasks_status)
-        count_remain = count_total - sum((self.tasks_status[_]['status'] for _ in self.tasks_status))
+        count_remain = count_total - sum((self.tasks_status[_]['status'] 
+                                          for _ in self.tasks_status if self.tasks_status[_]['status']))
         if not count_remain:
             print(f'All of total {count_total} missions success!')
             return True
@@ -244,6 +270,14 @@ class AiohttpFrame_FetchStore(AiohttpFrame_Login):
             print('-'*40)
             return False
     
+    async def _open_daily_report(self,prepared_data):
+        with open(self.daily_report_name,'w',newline='',encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile, delimiter='\t')#, quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(self.variables)
+            for _ in prepared_data:
+                writer.writerow(_)
+        os.startfile(self.daily_report_name)
+
     def delegate_set_tasks(self,*args,**kwargs):
         raise NotImplementedError
     
